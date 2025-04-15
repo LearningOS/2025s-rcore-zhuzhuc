@@ -15,8 +15,8 @@
 mod context;
 
 use crate::syscall::syscall;
-use crate::task::{exit_current_and_run_next, suspend_current_and_run_next};
-use crate::timer::set_next_trigger;
+use crate::task::{exit_current_and_run_next, suspend_current_and_run_next, current_task, TaskStatus};
+use crate::timer::{set_next_trigger, get_time_ms};
 use core::arch::global_asm;
 use riscv::register::{
     mtvec::TrapMode,
@@ -48,7 +48,6 @@ pub fn enable_timer_interrupt() {
 pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
     let scause = scause::read(); // get trap cause
     let stval = stval::read(); // get extra value
-                               // trace!("into {:?}", scause.cause());
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
@@ -66,6 +65,15 @@ pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             set_next_trigger();
+            let current = current_task().unwrap();
+            let mut inner = current.inner_exclusive_access().exclusive_access();
+            if inner.task_status == TaskStatus::Blocked {
+                let current_time = get_time_ms();
+                if current_time >= inner.sleep_until {
+                    inner.task_status = TaskStatus::Ready;
+                }
+            }
+            drop(inner);
             suspend_current_and_run_next();
         }
         _ => {

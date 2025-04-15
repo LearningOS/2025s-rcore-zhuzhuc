@@ -1,14 +1,34 @@
-//! Types related to task management
+use crate::sync::UPSafeCell;
+use crate::task::context::TaskContext;
 
-use super::TaskContext;
-
-/// The task control block (TCB) of a task.
-#[derive(Copy, Clone)]
 pub struct TaskControlBlock {
-    /// The task status in it's lifecycle
+    pub inner: UPSafeCell<TaskControlBlockInner>,
+}
+
+pub struct TaskControlBlockInner {
     pub task_status: TaskStatus,
-    /// The task context
     pub task_cx: TaskContext,
+    pub syscall_times: [usize; 500],
+    pub sleep_until: usize,
+}
+
+impl TaskControlBlock {
+    pub fn new() -> Self {
+        Self {
+            inner: unsafe {
+                UPSafeCell::new(TaskControlBlockInner {
+                    task_status: TaskStatus::Ready,
+                    task_cx: TaskContext::zero_init(),
+                    syscall_times: [0; 500],
+                    sleep_until: 0,
+                })
+            }
+        }
+    }
+
+    pub fn inner_exclusive_access(&self) -> &UPSafeCell<TaskControlBlockInner> {
+        &self.inner
+    }
 }
 
 /// The status of a task
@@ -22,4 +42,6 @@ pub enum TaskStatus {
     Running,
     /// exited
     Exited,
+    /// blocked (e.g. sleeping)
+    Blocked,
 }

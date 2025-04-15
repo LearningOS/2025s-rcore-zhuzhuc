@@ -1,8 +1,9 @@
 //! Process management syscalls
 use crate::{
-    task::{exit_current_and_run_next, suspend_current_and_run_next},
-    timer::get_time_us,
+    task::{exit_current_and_run_next, suspend_current_and_run_next, current_task, TaskStatus},
+    timer::{get_time_us, get_time_ms},
 };
+use log::trace;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -38,8 +39,44 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     0
 }
 
-// TODO: implement the syscall
-pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
-    trace!("kernel: sys_trace");
-    -1
+pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
+
+    match trace_request {
+        0 => {
+            // 读取内存，将id视为*const u8地址，读取一个字节
+            unsafe {
+                let value = *(id as *const u8);
+                value as isize
+            }
+        }
+        1 => {
+            // 写入内存，将id视为*const u8地址，写入data的最低字节
+            unsafe {
+                *(id as *mut u8) = data as u8;
+                0
+            }
+        }
+        2 => {
+            // 查询系统调用次数，返回编号为id的系统调用的调用次数
+            let task = current_task().unwrap();
+            let inner = task.inner_exclusive_access().exclusive_access();
+            let count = inner.syscall_times[id];
+            drop(inner);
+            count as isize
+        }
+        _ => -1,
+    }
+}
+
+pub fn sys_sleep(ms: usize) -> isize {
+    trace!("kernel: sys_sleep for {} ms", ms);
+    let current = current_task().unwrap();
+    let current_time = get_time_ms();
+    {
+        let mut inner = current.inner_exclusive_access().exclusive_access();
+        inner.sleep_until = current_time + ms;
+        inner.task_status = TaskStatus::Blocked;
+    }
+    suspend_current_and_run_next();
+    0
 }

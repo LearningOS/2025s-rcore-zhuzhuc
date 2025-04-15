@@ -1,4 +1,5 @@
 //! File and filesystem-related syscalls
+use log::trace;
 
 const FD_STDOUT: usize = 1;
 
