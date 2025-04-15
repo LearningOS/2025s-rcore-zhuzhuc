@@ -11,14 +11,39 @@
 - 实现内存读写操作时使用 unsafe 进行类型转换
 - 在系统调用处理函数中统计调用次数
 
-1. U态程序特权指令错误行为分析：
+### 实现中遇到的问题和解决方案
+
+1. **BorrowMutError 问题**
+   - 问题：在任务切换时出现 `BorrowMutError`，这是因为同时获取了多个任务的 `exclusive_access`
+   - 解决方案：修改 `run_next_task` 函数，确保在获取下一个任务的引用之前释放当前任务的引用
+
+2. **时钟周期转换问题**
+   - 问题：测试用例期望以时钟周期为单位进行睡眠，而不是毫秒
+   - 解决方案：在 `sys_sleep` 中将时钟周期转换为毫秒（每个时钟周期 = 10ms）
+
+### 设计要点
+
+1. **任务状态管理**
+   - 使用 `TaskStatus::Blocked` 表示任务处于睡眠状态
+   - 在 `TaskControlBlockInner` 中添加 `sleep_until` 字段记录唤醒时间
+
+2. **安全的引用管理**
+   - 使用 `UPSafeCell` 确保内部可变性的安全性
+   - 及时释放 `exclusive_access` 以避免死锁
+
+3. **时间管理**
+   - 使用 `get_time_ms()` 获取当前时间
+   - 在调度器中检查睡眠任务是否应该被唤醒
+
+U态程序特权指令错误行为分析：
+ 
 
 运行 ch2b_bad_*.rs 测例，观察到以下行为：
 - 当使用 S 态特权指令时，触发非法指令异常
 - 当访问 S 态寄存器时，触发非法指令异常
 - 使用的 SBI 版本：RustSBI version 0.3.0
 
-2. trap.S 中 __alltraps 和 __restore 函数分析：
+1. trap.S 中 __alltraps 和 __restore 函数分析：
 a) __restore 函数进入时的 sp 值：
 - sp 指向内核栈上的 TrapContext 结构体
 - 使用情景：

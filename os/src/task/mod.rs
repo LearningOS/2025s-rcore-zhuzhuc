@@ -148,13 +148,18 @@ impl TaskManager {
             inner.current_task = next;
             let current_task = &inner.tasks[current];
             let next_task = &inner.tasks[next];
-            let mut next_task_inner = next_task.inner_exclusive_access().exclusive_access();
-            next_task_inner.task_status = TaskStatus::Running;
+            
+            // 先获取当前任务的上下文指针
             let mut current_task_inner = current_task.inner_exclusive_access().exclusive_access();
             let current_task_cx_ptr = &mut current_task_inner.task_cx as *mut TaskContext;
+            drop(current_task_inner);
+            
+            // 再获取下一个任务的上下文指针
+            let mut next_task_inner = next_task.inner_exclusive_access().exclusive_access();
+            next_task_inner.task_status = TaskStatus::Running;
             let next_task_cx_ptr = &next_task_inner.task_cx as *const TaskContext;
             drop(next_task_inner);
-            drop(current_task_inner);
+            
             drop(inner);
             unsafe {
                 __switch(current_task_cx_ptr, next_task_cx_ptr);

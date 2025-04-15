@@ -68,15 +68,14 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     }
 }
 
-pub fn sys_sleep(ms: usize) -> isize {
-    trace!("kernel: sys_sleep for {} ms", ms);
+pub fn sys_sleep(ticks: usize) -> isize {
+    trace!("kernel: sys_sleep for {} ticks", ticks);
     let current = current_task().unwrap();
     let current_time = get_time_ms();
-    {
-        let mut inner = current.inner_exclusive_access().exclusive_access();
-        inner.sleep_until = current_time + ms;
-        inner.task_status = TaskStatus::Blocked;
-    }
+    let mut inner = current.inner_exclusive_access().exclusive_access();
+    inner.sleep_until = current_time + ticks * 10; // 每个时钟周期是10毫秒
+    inner.task_status = TaskStatus::Blocked;
+    drop(inner);
     suspend_current_and_run_next();
     0
 }
